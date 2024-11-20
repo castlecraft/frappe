@@ -98,8 +98,12 @@ def execute_job(site, method, event, job_name, kwargs, user=None, is_async=True,
 		method_name = cstr(method.__name__)
 
 	frappe.monitor.start("job", method_name, kwargs)
+ 
+	for before_job_task in frappe.get_hooks("before_job"):
+		frappe.call(before_job_task, method=method_name, kwargs=kwargs, transaction_type="job")
+  
 	try:
-		method(**kwargs)
+		retval = method(**kwargs)
 
 	except (frappe.db.InternalError, frappe.RetryBackgroundJobError) as e:
 		frappe.db.rollback()
@@ -128,8 +132,12 @@ def execute_job(site, method, event, job_name, kwargs, user=None, is_async=True,
 
 	else:
 		frappe.db.commit()
+		return retval
 
 	finally:
+		for after_job_task in frappe.get_hooks("after_job"):
+			frappe.call(after_job_task, method=method_name, kwargs=kwargs, result=retval)
+   
 		frappe.monitor.stop()
 		if is_async:
 			frappe.destroy()
