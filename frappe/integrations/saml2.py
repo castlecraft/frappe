@@ -1,10 +1,9 @@
 import frappe
 from frappe import _
-from urllib.parse import unquote
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
 @frappe.whitelist(allow_guest=True)
-def saml_login_initiate(provider):
+def login(provider):
     # Fetch the SAML provider settings
     saml_key = frappe.get_doc('Saml Login Key', provider)
     if not saml_key:
@@ -15,8 +14,8 @@ def saml_login_initiate(provider):
         "sp": {
             "entityId": saml_key.sp_entity_id,
             "assertionConsumerService": {
-                "url": saml_key.acs_url,
-                "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+                "url": frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.acs?provider={provider}"),
+                "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
             },
         },
         "idp": {
@@ -31,30 +30,31 @@ def saml_login_initiate(provider):
     request_data = {
         "http_host": frappe.local.request.host,
         "server_port": frappe.local.request.environ.get("SERVER_PORT"),
-        "script_name": frappe.local.request.environ.get("PATH_INFO"),
+        "script_name": frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.acs?provider={provider}"),
         "query_string": frappe.local.request.environ.get("QUERY_STRING"),
         "https": "on" if frappe.local.request.scheme == "https" else "off",
     }
 
-    client = OneLogin_Saml2_Auth(frappe.local.request, saml_settings)
-
+    client = OneLogin_Saml2_Auth(request_data, saml_settings)
     redirect_url = client.login()
     frappe.local.response["type"] = "redirect"
     frappe.local.response["location"] = redirect_url
 
 @frappe.whitelist(allow_guest=True)
-def saml_acs():
+def acs():
     try:
         # Handle the SAML response
+        post_data = dict(frappe.request.form.copy())
+        query_data = dict(frappe.request.args.copy())
         request_data = {
             "http_host": frappe.local.request.host,
             "server_port": frappe.local.request.environ.get("SERVER_PORT"),
             "script_name": frappe.local.request.environ.get("PATH_INFO"),
-            "query_string": frappe.local.request.environ.get("QUERY_STRING"),
+            "post_data": post_data,
             "https": "on" if frappe.local.request.scheme == "https" else "off",
         }
 
-        saml_key = frappe.get_doc("Saml Login Key", "t69c385nem")
+        saml_key = frappe.get_doc("Saml Login Key", query_data.get("provider"))
         if not saml_key:
             frappe.respond_as_web_page(_("SAML Login Failed"), _("SAML configuration missing"), http_status_code=500)
             return
@@ -64,8 +64,8 @@ def saml_acs():
             "sp": {
                 "entityId": saml_key.sp_entity_id,
                 "assertionConsumerService": {
-                    "url": saml_key.acs_url,
-                    "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+                    "url": frappe.utils.get_url("/api/method/frappe.integrations.saml2.acs"),
+                    "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
                 },
             },
             "idp": {
@@ -91,8 +91,7 @@ def saml_acs():
             return
 
         # Extract user data
-        user_data = client.get_attributes()
-        user_email = user_data.get("email", [None])[0]
+        user_email = client.get_nameid()
         if not user_email:
             frappe.respond_as_web_page(_("SAML Login Failed"), _("Email not found in SAML response"), http_status_code=403)
             return

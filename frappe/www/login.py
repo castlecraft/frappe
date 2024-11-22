@@ -62,6 +62,7 @@ def get_context(context):
 		fields=["name", "client_id", "base_url", "provider_name", "icon"],
 		order_by="name",
 	)
+
 	# Fetch the SAML login providers
 	saml_logins = frappe.get_all(
 		"Saml Login Key",
@@ -80,7 +81,7 @@ def get_context(context):
 			icon = f"<img src={escape_html(provider.icon)!r} alt={escape_html(provider.provider_name)!r}>"
 
 		# Generate the SAML login initiation URL using saml_login_initiate
-		auth_url = frappe.utils.get_url(f"/api/method/frappe.utils.saml.saml_login_initiate?provider={provider.name}")
+		auth_url = frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.login?provider={provider.name}")
 
 		# Prepare the context for rendering the button
 		context.provider_logins.append(
