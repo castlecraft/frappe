@@ -8,10 +8,9 @@
   "enable_saml_login",
   "provider_name",
   "sp_entity_id",
-  "sso_url",
-  "certificate",
-  "audience_uri",
-  "acs_url"
+  "idp_sso_url",
+  "idp_x509cert",
+  "idp_entity_id"
  ],
  "fields": [
   {
@@ -31,29 +30,24 @@
    "label": "SP Entity ID"
   },
   {
-   "fieldname": "sso_url",
+   "fieldname": "idp_sso_url",
    "fieldtype": "Data",
-   "label": "SSO Url"
+   "label": "IDP SSO URL"
   },
   {
-   "fieldname": "certificate",
+   "fieldname": "idp_entity_id",
+   "fieldtype": "Data",
+   "label": "IDP Entity ID"
+  },
+  {
+   "fieldname": "idp_x509cert",
    "fieldtype": "Text",
-   "label": "SP Public Certificate"
-  },
-  {
-   "fieldname": "audience_uri",
-   "fieldtype": "Data",
-   "label": "audience_uri"
-  },
-  {
-   "fieldname": "acs_url",
-   "fieldtype": "Data",
-   "label": "acs_url"
+   "label": "IDP x509cert"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-11-14 12:18:41.056918",
+ "modified": "2024-11-22 14:48:39.969381",
  "modified_by": "Administrator",
  "module": "Integrations",
  "name": "Saml Login Key",

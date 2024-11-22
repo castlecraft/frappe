@@ -19,12 +19,12 @@ def login(provider):
             },
         },
         "idp": {
-            "entityId": saml_key.audience_uri,
+            "entityId": saml_key.idp_entity_id,
             "singleSignOnService": {
-                "url": saml_key.sso_url,
+                "url": saml_key.idp_sso_url,
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
             },
-            "x509cert": saml_key.certificate,
+            "x509cert": saml_key.idp_x509cert,
         }
     }
     request_data = {
@@ -69,12 +69,12 @@ def acs():
                 },
             },
             "idp": {
-                "entityId": saml_key.audience_uri,
+                "entityId": saml_key.idp_entity_id,
                 "singleSignOnService": {
-                    "url": saml_key.sso_url,
+                    "url": saml_key.idp_sso_url,
                     "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
                 },
-                "x509cert": saml_key.certificate,
+                "x509cert": saml_key.idp_x509cert,
             }
         }
 

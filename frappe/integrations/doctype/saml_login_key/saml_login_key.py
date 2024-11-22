@@ -14,12 +14,12 @@ class SamlLoginKey(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		acs_url: DF.Data | None
-		audience_uri: DF.Data | None
-		certificate: DF.Text | None
 		enable_saml_login: DF.Check
+		idp_entity_id: DF.Data | None
+		idp_sso_url: DF.Data | None
+		idp_x509cert: DF.Text | None
 		provider_name: DF.Data | None
 		sp_entity_id: DF.Data | None
-		sso_url: DF.Data | None
 	# end: auto-generated types
+
 	pass
