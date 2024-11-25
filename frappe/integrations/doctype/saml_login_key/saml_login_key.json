@@ -8,7 +8,9 @@
   "enable_saml_login",
   "provider_name",
   "sp_entity_id",
+  "sp_private_key",
   "idp_sso_url",
+  "sp_x509cert",
   "idp_x509cert",
   "idp_entity_id"
  ],
@@ -43,11 +45,21 @@
    "fieldname": "idp_x509cert",
    "fieldtype": "Text",
    "label": "IDP x509cert"
+  },
+  {
+   "fieldname": "sp_private_key",
+   "fieldtype": "Small Text",
+   "label": "SP Private Key"
+  },
+  {
+   "fieldname": "sp_x509cert",
+   "fieldtype": "Small Text",
+   "label": "SP x509cert"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-11-22 14:48:39.969381",
+ "modified": "2024-11-25 22:43:53.336475",
  "modified_by": "Administrator",
  "module": "Integrations",
  "name": "Saml Login Key",

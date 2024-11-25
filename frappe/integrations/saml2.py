@@ -1,3 +1,4 @@
+import os
 import frappe
 from frappe import _
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -8,7 +9,6 @@ def login(provider):
     saml_key = frappe.get_doc('Saml Login Key', provider)
     if not saml_key:
         frappe.throw(_("SAML provider settings not found"))
-
     # Create the SAML settings dictionary
     saml_settings = {
         "sp": {
@@ -17,6 +17,8 @@ def login(provider):
                 "url": frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.acs?provider={provider}"),
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
             },
+            "privateKey": saml_key.sp_private_key,
+            "x509cert": saml_key.sp_x509cert,
         },
         "idp": {
             "entityId": saml_key.idp_entity_id,
@@ -25,6 +27,12 @@ def login(provider):
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
             },
             "x509cert": saml_key.idp_x509cert,
+        },
+        "security": {
+            "authnRequestsSigned": True,  # Sign SAML authentication requests
+            "signatureAlgorithm": "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+            "digestAlgorithm": "http://www.w3.org/2001/04/xmlenc#sha256",
+            "rejectUnsolicitedResponsesWithInResponseTo": False,
         }
     }
     request_data = {
@@ -34,6 +42,7 @@ def login(provider):
         "query_string": frappe.local.request.environ.get("QUERY_STRING"),
         "https": "on" if frappe.local.request.scheme == "https" else "off",
     }
+    
 
     client = OneLogin_Saml2_Auth(request_data, saml_settings)
     redirect_url = client.login()
@@ -67,6 +76,7 @@ def acs():
                     "url": frappe.utils.get_url("/api/method/frappe.integrations.saml2.acs"),
                     "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
                 },
+                "signatureAlgorithm": "RSA_SHA256",
             },
             "idp": {
                 "entityId": saml_key.idp_entity_id,

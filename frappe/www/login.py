@@ -67,7 +67,7 @@ def get_context(context):
 	saml_logins = frappe.get_all(
 		"Saml Login Key",
 		filters={"enable_saml_login": 1},
-		fields=["name", "provider_name", "sp_entity_id", "sso_url", "certificate", "audience_uri", "acs_url"],
+		fields=["*"],
 		order_by="name",
 	)
 
