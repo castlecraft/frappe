@@ -1,14 +1,14 @@
 import os
 import frappe
 from frappe import _
+from frappe.www.login import sanitize_redirect
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
 @frappe.whitelist(allow_guest=True)
 def login(provider):
+    redirect_location= frappe.local.request.args.get("redirect-to", "/app")
     # Fetch the SAML provider settings
     saml_key = frappe.get_doc('Saml Login Key', provider)
-    if not saml_key:
-        frappe.throw(_("SAML provider settings not found"))
     # Create the SAML settings dictionary
     saml_settings = {
         "sp": {
@@ -45,7 +45,7 @@ def login(provider):
     
 
     client = OneLogin_Saml2_Auth(request_data, saml_settings)
-    redirect_url = client.login()
+    redirect_url = client.login(return_to=redirect_location)
     frappe.local.response["type"] = "redirect"
     frappe.local.response["location"] = redirect_url
 
@@ -64,9 +64,6 @@ def acs():
         }
 
         saml_key = frappe.get_doc("Saml Login Key", query_data.get("provider"))
-        if not saml_key:
-            frappe.respond_as_web_page(_("SAML Login Failed"), _("SAML configuration missing"), http_status_code=500)
-            return
 
         # Create the SAML settings dictionary
         saml_settings = {
@@ -87,7 +84,6 @@ def acs():
                 "x509cert": saml_key.idp_x509cert,
             }
         }
-
         client = OneLogin_Saml2_Auth(request_data, saml_settings)
         client.process_response()
 
@@ -116,10 +112,14 @@ def acs():
         frappe.local.login_manager.user = user
         frappe.local.login_manager.post_login()
         frappe.db.commit()
-
-        # Redirect to workspace
+        redirect_to = post_data.get('RelayState')
+        # Default to /me for website users or /app for desk users
+        if not redirect_to:
+            if frappe.local.response.get('type') == 'redirect':
+                redirect_to = "/me" if frappe.session.user_type == "Website User" else "/app"
         frappe.local.response["type"] = "redirect"
-        frappe.local.response["location"] = frappe.utils.get_url("/app")
+        frappe.local.response["location"] = frappe.utils.get_url(redirect_to)
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("SAML Login Error"))
         frappe.respond_as_web_page(_("SAML Login Failed"), frappe.get_traceback(), http_status_code=500)

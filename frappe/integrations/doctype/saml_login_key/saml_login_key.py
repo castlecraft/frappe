@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 # import frappe
+import frappe
 from frappe.model.document import Document
 
 
@@ -18,10 +19,11 @@ class SamlLoginKey(Document):
 		idp_entity_id: DF.Data | None
 		idp_sso_url: DF.Data | None
 		idp_x509cert: DF.Text | None
-		provider_name: DF.Data | None
+		provider_name: DF.Data
 		sp_entity_id: DF.Data | None
 		sp_private_key: DF.SmallText | None
 		sp_x509cert: DF.SmallText | None
 	# end: auto-generated types
 
-	pass
+	def autoname(self):
+		self.name = frappe.scrub(self.provider_name)
