@@ -6,7 +6,7 @@ from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
 @frappe.whitelist(allow_guest=True)
 def login(provider):
-    redirect_location= frappe.local.request.args.get("redirect-to", "/app")
+    redirect_location= frappe.local.request.args.get("redirect-to","")
     # Fetch the SAML provider settings
     saml_key = frappe.get_doc('Saml Login Key', provider)
     # Create the SAML settings dictionary
@@ -95,28 +95,38 @@ def acs():
         if not client.is_authenticated():
             frappe.respond_as_web_page(_("SAML Login Failed"), _("User not authenticated"), http_status_code=403)
             return
-
-        # Extract user data
+        attributes = client.get_attributes()
+        first_name = attributes.get('firstName', [None])[0]
+        last_name = attributes.get('lastName', [None])[0]
         user_email = client.get_nameid()
         if not user_email:
             frappe.respond_as_web_page(_("SAML Login Failed"), _("Email not found in SAML response"), http_status_code=403)
             return
-
-        # Check if the user exists
         user = frappe.db.get_value("User", {"email": user_email})
         if not user:
-            frappe.respond_as_web_page(_("SAML Login Failed"), _("User not found"), http_status_code=403)
-            return
+            if not first_name:
+                frappe.throw("First Name is not set")
+            user= frappe.new_doc("User")
+            user.first_name= first_name
+            user.last_name= last_name
+            user.email= user_email
+            user.enabled=1
+            user.flags.ignore_permissions = True
+            user.flags.no_welcome_mail = True
+            if default_role := frappe.db.get_single_value("Portal Settings", "default_role"):
+                user.add_roles(default_role)
+            user.save()
+        else:
+            user = frappe.get_doc("User",user_email)
 
         # Log the user in
-        frappe.local.login_manager.user = user
+        frappe.local.login_manager.user = user.name
         frappe.local.login_manager.post_login()
         frappe.db.commit()
         redirect_to = post_data.get('RelayState')
         # Default to /me for website users or /app for desk users
         if not redirect_to:
-            if frappe.local.response.get('type') == 'redirect':
-                redirect_to = "/me" if frappe.session.user_type == "Website User" else "/app"
+            redirect_to = "/me" if user.user_type == "Website User" else "/app"
         frappe.local.response["type"] = "redirect"
         frappe.local.response["location"] = frappe.utils.get_url(redirect_to)
 
