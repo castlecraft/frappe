@@ -21,7 +21,7 @@ class SamlLoginKey(Document):
 		idp_x509cert: DF.Text | None
 		provider_name: DF.Data
 		sp_entity_id: DF.Data | None
-		sp_private_key: DF.SmallText | None
+		sp_private_key: DF.Password | None
 		sp_x509cert: DF.SmallText | None
 	# end: auto-generated types
 

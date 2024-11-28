@@ -1,6 +1,7 @@
 import os
 import frappe
 from frappe import _
+from frappe.utils.password import get_decrypted_password
 from frappe.www.login import sanitize_redirect
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
@@ -17,7 +18,7 @@ def login(provider):
                 "url": frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.acs?provider={provider}"),
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
             },
-            "privateKey": saml_key.sp_private_key,
+            "privateKey":saml_key.get_password('sp_private_key'),
             "x509cert": saml_key.sp_x509cert,
         },
         "idp": {
@@ -48,6 +49,7 @@ def login(provider):
     redirect_url = client.login(return_to=redirect_location)
     frappe.local.response["type"] = "redirect"
     frappe.local.response["location"] = redirect_url
+
 
 @frappe.whitelist(allow_guest=True)
 def acs():
@@ -105,7 +107,7 @@ def acs():
         user = frappe.db.get_value("User", {"email": user_email})
         if not user:
             if not first_name:
-                frappe.throw("First Name is not set")
+                first_name=user_email
             user= frappe.new_doc("User")
             user.first_name= first_name
             user.last_name= last_name
