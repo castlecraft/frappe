@@ -1,18 +1,19 @@
 {
  "actions": [],
- "allow_rename": 1,
  "creation": "2024-11-13 12:16:56.878339",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "enable_saml_login",
   "provider_name",
+  "sp_details_section",
   "sp_entity_id",
-  "sp_private_key",
-  "idp_sso_url",
   "sp_x509cert",
+  "sp_private_key",
+  "idp_details_section",
+  "idp_entity_id",
   "idp_x509cert",
-  "idp_entity_id"
+  "idp_sso_url"
  ],
  "fields": [
   {
@@ -24,7 +25,9 @@
   {
    "fieldname": "provider_name",
    "fieldtype": "Data",
-   "label": "Provider Name"
+   "in_list_view": 1,
+   "label": "Provider Name",
+   "reqd": 1
   },
   {
    "fieldname": "sp_entity_id",
@@ -47,19 +50,34 @@
    "label": "IDP x509cert"
   },
   {
-   "fieldname": "sp_private_key",
-   "fieldtype": "Small Text",
-   "label": "SP Private Key"
-  },
-  {
    "fieldname": "sp_x509cert",
    "fieldtype": "Small Text",
    "label": "SP x509cert"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.enable_saml_login",
+   "fieldname": "sp_details_section",
+   "fieldtype": "Section Break",
+   "label": "SP Details"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.enable_saml_login",
+   "fieldname": "idp_details_section",
+   "fieldtype": "Section Break",
+   "label": "IDP Details"
+  },
+  {
+   "fieldname": "sp_private_key",
+   "fieldtype": "Password",
+   "label": "SP Private Key",
+   "length": 1600
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-11-25 22:43:53.336475",
+ "modified": "2024-11-28 15:20:40.247755",
  "modified_by": "Administrator",
  "module": "Integrations",
  "name": "Saml Login Key",
@@ -80,5 +98,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "title_field": "provider_name"
 }

@@ -86,8 +86,10 @@ def get_context(context):
 			icon = f"<img src={escape_html(provider.icon)!r} alt={escape_html(provider.provider_name)!r}>"
 
 		# Generate the SAML login initiation URL using saml_login_initiate
-		auth_url = frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.login?provider={provider.name}")
-
+		if not redirect_to:
+			auth_url = frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.login?provider={provider.name}")
+		else:
+			auth_url = frappe.utils.get_url(f"/api/method/frappe.integrations.saml2.login?provider={provider.name}&redirect-to={redirect_to}")
 		# Prepare the context for rendering the button
 		context.provider_logins.append(
 			{
