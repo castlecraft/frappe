@@ -172,7 +172,6 @@ frappe.views.BaseList = class BaseList {
 		this.page.main.addClass("layout-main-list");
 		this.page.page_form.removeClass("row").addClass("flex");
 		this.hide_page_form && this.page.page_form.hide();
-		this.hide_sidebar && this.$page.addClass("no-list-sidebar");
 		this.setup_page_head();
 	}
 
@@ -277,7 +276,10 @@ frappe.views.BaseList = class BaseList {
 	}
 
 	setup_side_bar() {
-		if (this.hide_sidebar || !frappe.boot.desk_settings.list_sidebar) return;
+		if (this.page.disable_sidebar_toggle) {
+			return;
+		}
+
 		this.list_sidebar = new frappe.views.ListSidebar({
 			doctype: this.doctype,
 			stats: this.stats,
@@ -916,7 +918,7 @@ class FilterArea {
 		$(`<div class="filter-selector">
 			<div class="btn-group">
 				<button class="btn btn-default btn-sm filter-button">
-					<span class="filter-icon">
+					<span class="filter-icon button-icon">
 						${frappe.utils.icon("es-line-filter")}
 					</span>
 					<span class="button-label hidden-xs">
@@ -924,7 +926,7 @@ class FilterArea {
 					<span>
 				</button>
 				<button class="btn btn-default btn-sm filter-x-button" title="${__("Clear all filters")}">
-					<span class="filter-icon">
+					<span class="filter-icon button-icon">
 						${frappe.utils.icon("es-small-close")}
 					</span>
 				</button>

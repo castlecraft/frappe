@@ -184,8 +184,10 @@ def load_desktop_data(bootinfo):
 				app_name=app_info.get("name") or app_name,
 				app_title=app_info.get("title")
 				or (
-					frappe.get_hooks("app_title", app_name=app_name)
-					and frappe.get_hooks("app_title", app_name=app_name)[0]
+					(
+						frappe.get_hooks("app_title", app_name=app_name)
+						and frappe.get_hooks("app_title", app_name=app_name)[0]
+					)
 					or ""
 				)
 				or app_name,
@@ -381,25 +383,6 @@ def load_print_css(bootinfo, print_settings):
 	bootinfo.print_css = frappe.www.printview.get_print_style(
 		print_settings.print_style or "Redesign", for_legacy=True
 	)
-
-
-def get_unseen_notes():
-	note = DocType("Note")
-	nsb = DocType("Note Seen By").as_("nsb")
-
-	return (
-		frappe.qb.from_(note)
-		.select(note.name, note.title, note.content, note.notify_on_every_login)
-		.where(
-			(note.notify_on_login == 1)
-			& (note.expire_notification_on > frappe.utils.now())
-			& (
-				ParameterizedValueWrapper(frappe.session.user).notin(
-					SubQuery(frappe.qb.from_(nsb).select(nsb.user).where(nsb.parent == note.name))
-				)
-			)
-		)
-	).run(as_dict=1)
 
 
 def get_success_action():

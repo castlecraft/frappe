@@ -24,7 +24,7 @@ from frappe.model.naming import set_new_name, validate_name
 from frappe.model.utils import is_virtual_doctype, simple_singledispatch
 from frappe.model.workflow import set_workflow_state_on_action, validate_workflow
 from frappe.types import DF, DocRef
-from frappe.utils import compare, cstr, date_diff, file_lock, flt, now
+from frappe.utils import compare, cstr, date_diff, file_lock, flt, get_table_name, now
 from frappe.utils.data import get_absolute_url, get_datetime, get_timedelta, getdate
 from frappe.utils.global_search import update_global_search
 
@@ -232,13 +232,25 @@ class Document(BaseDocument, DocRef):
 			self._fix_numeric_types()
 
 		else:
-			get_value_kwargs = {"for_update": self.flags.for_update, "as_dict": True}
-			if not isinstance(self.name, dict | list):
-				get_value_kwargs["order_by"] = None
-
-			d = frappe.db.get_value(
-				doctype=self.doctype, filters=self.name, fieldname="*", **get_value_kwargs
-			)
+			if isinstance(self.name, str) and self.doctype != "DocType":
+				# Fast path - use raw SQL to avoid QB/ORM overheads.
+				d = frappe.db.sql(
+					"SELECT * FROM {table_name} WHERE `name` = %s {for_update}".format(
+						table_name=get_table_name(self.doctype, wrap_in_backticks=True),
+						for_update="FOR UPDATE" if self.flags.for_update else "",
+					),
+					(self.name),
+					as_dict=True,
+				)
+				d = d[0] if d else d
+			else:
+				d = frappe.db.get_value(
+					doctype=self.doctype,
+					filters=self.name,
+					fieldname="*",
+					for_update=self.flags.for_update,
+					as_dict=True,
+				)
 
 			if not d:
 				frappe.throw(
@@ -265,8 +277,10 @@ class Document(BaseDocument, DocRef):
 				self.set(df.fieldname, [])
 				continue
 
-			children = (
-				frappe.db.get_values(
+			if self.doctype == "DocType":
+				# This special handling is required because of bootstrapping code that doesn't
+				# handle failures correctly.
+				children = frappe.db.get_values(
 					df.options,
 					{"parent": self.name, "parenttype": self.doctype, "parentfield": df.fieldname},
 					"*",
@@ -274,10 +288,22 @@ class Document(BaseDocument, DocRef):
 					order_by="idx asc",
 					for_update=self.flags.for_update,
 				)
-				or []
-			)
+			else:
+				# Fast pass for all other doctypes - using raw SQL
+				children = frappe.db.sql(
+					"""SELECT * FROM {table_name}
+					WHERE `parent`= %(parent)s
+						AND `parenttype`= %(parenttype)s
+						AND `parentfield`= %(parentfield)s
+					ORDER BY `idx` ASC {for_update}""".format(
+						table_name=get_table_name(df.options, wrap_in_backticks=True),
+						for_update="FOR UPDATE" if self.flags.for_update else "",
+					),
+					{"parent": self.name, "parenttype": self.doctype, "parentfield": df.fieldname},
+					as_dict=True,
+				)
 
-			self.set(df.fieldname, children)
+			self.set(df.fieldname, children or [])
 
 		return self
 
@@ -392,6 +418,7 @@ class Document(BaseDocument, DocRef):
 		self.flags.in_insert = True
 
 		if self.get("amended_from"):
+			self.validate_amended_from()
 			self.copy_attachments_from_amended_from()
 
 		relink_mismatched_files(self)
@@ -480,6 +507,13 @@ class Document(BaseDocument, DocRef):
 
 		return self
 
+	def validate_amended_from(self):
+		if frappe.db.get_value(self.doctype, self.get("amended_from"), "docstatus") != 2:
+			message = _(
+				"{0} cannot be amended because it is not cancelled. Please cancel the document before creating an amendment."
+			).format(frappe.utils.get_link_to_form(self.doctype, self.get("amended_from")))
+			frappe.throw(message, title=_("Amendment Not Allowed"))
+
 	def copy_attachments_from_amended_from(self):
 		"""Copy attachments from `amended_from`"""
 		from frappe.desk.form.load import get_attachments
@@ -510,7 +544,7 @@ class Document(BaseDocument, DocRef):
 
 	def update_child_table(self, fieldname: str, df: Optional["DocField"] = None):
 		"""sync child table for given fieldname"""
-		df: "DocField" = df or self.meta.get_field(fieldname)
+		df: DocField = df or self.meta.get_field(fieldname)
 		all_rows = self.get(df.fieldname)
 
 		# delete rows that do not match the ones in the document
@@ -677,7 +711,7 @@ class Document(BaseDocument, DocRef):
 		self._fix_rating_value()
 		self._validate_code_fields()
 		self._sync_autoname_field()
-		self._extract_images_from_text_editor()
+		self._extract_images_from_editor()
 		self._sanitize_content()
 		self._save_passwords()
 		self.validate_workflow()
@@ -690,7 +724,7 @@ class Document(BaseDocument, DocRef):
 			d._fix_rating_value()
 			d._validate_code_fields()
 			d._sync_autoname_field()
-			d._extract_images_from_text_editor()
+			d._extract_images_from_editor()
 			d._sanitize_content()
 			d._save_passwords()
 		if self.is_new():
@@ -1072,7 +1106,8 @@ class Document(BaseDocument, DocRef):
 	def run_notifications(self, method):
 		"""Run notifications for this method"""
 		if (
-			(frappe.flags.in_import and frappe.flags.mute_emails)
+			method == "onload"
+			or (frappe.flags.in_import and frappe.flags.mute_emails)
 			or frappe.flags.in_patch
 			or frappe.flags.in_install
 		):
@@ -1507,8 +1542,17 @@ class Document(BaseDocument, DocRef):
 				for df in doc.meta.get("fields", {"fieldtype": ["in", ["Currency", "Float", "Percent"]]})
 			)
 
+		# PERF: flt internally has to resolve this if we don't specify it.
+		rounding_method = frappe.get_system_settings("rounding_method")
 		for fieldname in fieldnames:
-			doc.set(fieldname, flt(doc.get(fieldname), self.precision(fieldname, doc.get("parentfield"))))
+			doc.set(
+				fieldname,
+				flt(
+					doc.get(fieldname),
+					self.precision(fieldname, doc.get("parentfield")),
+					rounding_method=rounding_method,
+				),
+			)
 
 	def get_url(self):
 		"""Return Desk URL for this document."""
@@ -1717,8 +1761,16 @@ class Document(BaseDocument, DocRef):
 			return
 
 		if date_diff(to_date, from_date) < 0:
+			table_row = ""
+			if self.meta.istable:
+				table_row = _("{0} row #{1}: ").format(
+					_(frappe.unscrub(self.parentfield)),
+					self.idx,
+				)
+
 			frappe.throw(
-				_("{0} must be after {1}").format(
+				table_row
+				+ _("{0} must be after {1}").format(
 					frappe.bold(_(self.meta.get_label(to_date_field))),
 					frappe.bold(_(self.meta.get_label(from_date_field))),
 				),

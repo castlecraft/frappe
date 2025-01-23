@@ -182,6 +182,7 @@ class User(Document):
 		self.populate_role_profile_roles()
 		self.check_roles_added()
 		self.set_system_user()
+		self.clean_name()
 		self.set_full_name()
 		self.check_enable_disable()
 		self.ensure_unique_roles()
@@ -309,6 +310,11 @@ class User(Document):
 	def has_website_permission(self, ptype, user, verbose=False):
 		"""Return True if current user is the session user."""
 		return self.name == frappe.session.user
+
+	def clean_name(self):
+		self.first_name = escape_html(self.first_name)
+		self.middle_name = escape_html(self.middle_name)
+		self.last_name = escape_html(self.last_name)
 
 	def set_full_name(self):
 		self.full_name = " ".join(filter(None, [self.first_name, self.last_name]))
@@ -441,7 +447,7 @@ class User(Document):
 
 	def get_fullname(self):
 		"""get first_name space last_name"""
-		return (self.first_name or "") + (self.first_name and " " or "") + (self.last_name or "")
+		return (self.first_name or "") + ((self.first_name and " ") or "") + (self.last_name or "")
 
 	def password_reset_mail(self, link):
 		reset_password_template = frappe.db.get_system_setting("reset_password_template")
@@ -501,8 +507,8 @@ class User(Document):
 		args.update(add_args)
 
 		sender = (
-			frappe.session.user not in STANDARD_USERS and get_formatted_email(frappe.session.user) or None
-		)
+			frappe.session.user not in STANDARD_USERS and get_formatted_email(frappe.session.user)
+		) or None
 
 		if custom_template:
 			from frappe.email.doctype.email_template.email_template import get_email_template
@@ -808,9 +814,9 @@ class User(Document):
 
 @frappe.whitelist()
 def get_timezones():
-	import pytz
+	import zoneinfo
 
-	return {"timezones": pytz.all_timezones}
+	return {"timezones": zoneinfo.available_timezones()}
 
 
 @frappe.whitelist()
@@ -1083,9 +1089,12 @@ def user_query(doctype, txt, searchfield, start, page_len, filters):
 	list_filters = {
 		"enabled": 1,
 		"docstatus": ["<", 2],
-		"name": ["not in", STANDARD_USERS],
-		searchfield: ["like", f"%{txt}%"],
 	}
+
+	# Check if we have a search term, and decide the filters depending on the search term
+	or_filters = [[searchfield, "like", f"%{txt}%"]]
+	if "name" in searchfield:
+		or_filters += [[field, "like", f"%{txt}%"] for field in ("first_name", "middle_name", "last_name")]
 
 	if filters:
 		if not (filters.get("ignore_user_type") and frappe.session.data.user_type == "System User"):
@@ -1094,17 +1103,16 @@ def user_query(doctype, txt, searchfield, start, page_len, filters):
 		filters.pop("ignore_user_type", None)
 		list_filters.update(filters)
 
-	return [
-		(user.name, user.full_name)
-		for user in frappe.get_list(
-			doctype,
-			filters=list_filters,
-			fields=["name", "full_name"],
-			limit_start=start,
-			limit_page_length=page_len,
-			order_by="name asc",
-		)
-	]
+	return frappe.get_list(
+		doctype,
+		filters=list_filters,
+		fields=["name", "full_name"],
+		limit_start=start,
+		limit_page_length=page_len,
+		order_by="name asc",
+		or_filters=or_filters,
+		as_list=True,
+	)
 
 
 def get_total_users():

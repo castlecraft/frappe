@@ -90,14 +90,14 @@ class ServerScript(Document):
 		self.sync_scheduled_job_type()
 
 	def clear_cache(self):
-		frappe.cache.delete_value("server_script_map")
+		frappe.client_cache.delete_value("server_script_map")
 		return super().clear_cache()
 
 	def on_trash(self):
-		frappe.cache.delete_value("server_script_map")
+		frappe.client_cache.delete_value("server_script_map")
 		if self.script_type == "Scheduler Event":
 			for job in self.scheduled_jobs:
-				scheduled_job_type: "ScheduledJobType" = frappe.get_doc("Scheduled Job Type", job.name)
+				scheduled_job_type: ScheduledJobType = frappe.get_doc("Scheduled Job Type", job.name)
 				scheduled_job_type.stopped = True
 				scheduled_job_type.server_script = None
 				scheduled_job_type.save()

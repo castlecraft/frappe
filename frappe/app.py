@@ -26,7 +26,7 @@ from frappe.auth import SAFE_HTTP_METHODS, UNSAFE_HTTP_METHODS, HTTPRequest, val
 from frappe.middlewares import StaticDataMiddleware
 from frappe.utils import CallbackManager, cint, get_site_name
 from frappe.utils.data import escape_html
-from frappe.utils.error import log_error_snapshot
+from frappe.utils.error import log_error, log_error_snapshot
 from frappe.website.page_renderers.error_page import ErrorPage
 from frappe.website.serve import get_response
 
@@ -35,35 +35,34 @@ _sites_path = os.environ.get("SITES_PATH", ".")
 
 
 # If gc.freeze is done then importing modules before forking allows us to share the memory
-if frappe._tune_gc:
-	import gettext
+import gettext
 
-	import babel
-	import babel.messages
-	import bleach
-	import num2words
-	import pydantic
+import babel
+import babel.messages
+import bleach
+import num2words
+import pydantic
 
-	import frappe.boot
-	import frappe.client
-	import frappe.core.doctype.file.file
-	import frappe.core.doctype.user.user
-	import frappe.database.mariadb.database  # Load database related utils
-	import frappe.database.query
-	import frappe.desk.desktop  # workspace
-	import frappe.desk.form.save
-	import frappe.model.db_query
-	import frappe.query_builder
-	import frappe.utils.background_jobs  # Enqueue is very common
-	import frappe.utils.data  # common utils
-	import frappe.utils.jinja  # web page rendering
-	import frappe.utils.jinja_globals
-	import frappe.utils.redis_wrapper  # Exact redis_wrapper
-	import frappe.utils.safe_exec
-	import frappe.utils.typing_validations  # any whitelisted method uses this
-	import frappe.website.path_resolver  # all the page types and resolver
-	import frappe.website.router  # Website router
-	import frappe.website.website_generator  # web page doctypes
+import frappe.boot
+import frappe.client
+import frappe.core.doctype.file.file
+import frappe.core.doctype.user.user
+import frappe.database.mariadb.database  # Load database related utils
+import frappe.database.query
+import frappe.desk.desktop  # workspace
+import frappe.desk.form.save
+import frappe.model.db_query
+import frappe.query_builder
+import frappe.utils.background_jobs  # Enqueue is very common
+import frappe.utils.data  # common utils
+import frappe.utils.jinja  # web page rendering
+import frappe.utils.jinja_globals
+import frappe.utils.redis_wrapper  # Exact redis_wrapper
+import frappe.utils.safe_exec
+import frappe.utils.typing_validations  # any whitelisted method uses this
+import frappe.website.path_resolver  # all the page types and resolver
+import frappe.website.router  # Website router
+import frappe.website.website_generator  # web page doctypes
 
 # end: module pre-loading
 
@@ -237,25 +236,17 @@ def log_request(request, response):
 		)
 
 
-def process_response(response):
+def process_response(response: Response):
 	if not response:
 		return
 
 	# cache control
 	# read: https://simonhearne.com/2022/caching-header-best-practices/
 	if frappe.local.response.can_cache:
-		response.headers.extend(
-			{
-				# default: 5m (proxy), 5m (client), 3h (allow stale resources for this long if upstream is down)
-				"Cache-Control": "public,s-maxage=300,max-age=300,stale-while-revalidate=10800",
-			}
-		)
+		# default: 5m (client), 3h (allow stale resources for this long if upstream is down)
+		response.headers.setdefault("Cache-Control", "private,max-age=300,stale-while-revalidate=10800")
 	else:
-		response.headers.extend(
-			{
-				"Cache-Control": "no-store,no-cache,must-revalidate,max-age=0",
-			}
-		)
+		response.headers.setdefault("Cache-Control", "no-store,no-cache,must-revalidate,max-age=0")
 
 	# Set cookies, only if response is non-cacheable to avoid proxy cache invalidation
 	if hasattr(frappe.local, "cookie_manager") and not frappe.local.response.can_cache:
@@ -334,10 +325,8 @@ def handle_exception(e):
 	http_status_code = getattr(e, "http_status_code", 500)
 	accept_header = frappe.get_request_header("Accept") or ""
 	respond_as_json = (
-		frappe.get_request_header("Accept")
-		and (frappe.local.is_ajax or "application/json" in accept_header)
-		or (frappe.local.request.path.startswith("/api/") and not accept_header.startswith("text"))
-	)
+		frappe.get_request_header("Accept") and (frappe.local.is_ajax or "application/json" in accept_header)
+	) or (frappe.local.request.path.startswith("/api/") and not accept_header.startswith("text"))
 
 	if not frappe.session.user:
 		# If session creation fails then user won't be unset. This causes a lot of code that
@@ -393,7 +382,7 @@ def handle_exception(e):
 		if hasattr(frappe.local, "login_manager"):
 			frappe.local.login_manager.clear_cookies()
 
-	if http_status_code >= 500:
+	if http_status_code >= 500 or frappe.conf.developer_mode:
 		log_error_snapshot(e)
 
 	if frappe.conf.get("developer_mode") and not respond_as_json:
@@ -521,20 +510,3 @@ def application_with_statics():
 	application = StaticDataMiddleware(application, {"/files": str(os.path.abspath(_sites_path))})
 
 	return application
-
-
-# Remove references to pattern that are pre-compiled and loaded to global scopes.
-re.purge()
-
-# Both Gunicorn and RQ use forking to spawn workers. In an ideal world, the fork should be sharing
-# most of the memory if there are no writes made to data because of Copy on Write, however,
-# python's GC is not CoW friendly and writes to data even if user-code doesn't. Specifically, the
-# generational GC which stores and mutates every python object: `PyGC_Head`
-#
-# Calling gc.freeze() moves all the objects imported so far into permanant generation and hence
-# doesn't mutate `PyGC_Head`
-#
-# Refer to issue for more info: https://github.com/frappe/frappe/issues/18927
-if frappe._tune_gc:
-	gc.collect()  # clean up any garbage created so far before freeze
-	gc.freeze()

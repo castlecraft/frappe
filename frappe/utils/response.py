@@ -219,13 +219,16 @@ def json_handler(obj):
 	elif isinstance(obj, LocalProxy):
 		return str(obj)
 
+	elif hasattr(obj, "__json__"):
+		return obj.__json__()
+
 	elif isinstance(obj, Iterable):
 		return list(obj)
 
 	elif isinstance(obj, Match):
 		return obj.string
 
-	elif type(obj) == type or isinstance(obj, Exception):
+	elif type(obj) is type or isinstance(obj, Exception):
 		return repr(obj)
 
 	elif callable(obj):
@@ -236,9 +239,6 @@ def json_handler(obj):
 
 	elif isinstance(obj, Path):
 		return str(obj)
-
-	elif hasattr(obj, "__json__"):
-		return obj.__json__()
 
 	elif hasattr(obj, "__value__"):  # order imporant: defer to __json__ if implemented
 		return obj.__value__()
@@ -293,6 +293,7 @@ def send_private_file(path: str) -> Response:
 		path = "/protected/" + path
 		response = Response()
 		response.headers["X-Accel-Redirect"] = quote(frappe.utils.encode(path))
+		response.headers["Cache-Control"] = "private,max-age=3600,stale-while-revalidate=86400"
 
 	else:
 		filepath = frappe.utils.get_site_path(path)
