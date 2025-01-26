@@ -1,8 +1,5 @@
-import os
 import frappe
 from frappe import _
-from frappe.utils.password import get_decrypted_password
-from frappe.www.login import sanitize_redirect
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
 @frappe.whitelist(allow_guest=True)
@@ -36,6 +33,15 @@ def login(provider):
             "rejectUnsolicitedResponsesWithInResponseTo": False,
         }
     }
+    
+
+    client = OneLogin_Saml2_Auth(get_request_data(provider), saml_settings)
+    redirect_url = client.login(return_to=redirect_location)
+    frappe.local.response["type"] = "redirect"
+    frappe.local.response["location"] = redirect_url
+
+
+def get_request_data(provider):
     request_data = {
         "http_host": frappe.local.request.host,
         "server_port": frappe.local.request.environ.get("SERVER_PORT"),
@@ -43,14 +49,8 @@ def login(provider):
         "query_string": frappe.local.request.environ.get("QUERY_STRING"),
         "https": "on" if frappe.local.request.scheme == "https" else "off",
     }
+    return request_data
     
-
-    client = OneLogin_Saml2_Auth(request_data, saml_settings)
-    redirect_url = client.login(return_to=redirect_location)
-    frappe.local.response["type"] = "redirect"
-    frappe.local.response["location"] = redirect_url
-
-
 @frappe.whitelist(allow_guest=True)
 def acs():
     try:
